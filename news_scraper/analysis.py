@@ -144,8 +144,10 @@ def combine_text(articles: list[dict]) -> str:
     for art in articles:
         title = art.get("title", "")
         body  = art.get("full_text", "") or art.get("summary", "")
-        if title: parts.append(title)
-        if body:  parts.append(body)
+        if title:
+            parts.append(title)
+        if body:
+            parts.append(body)
     return " ".join(parts)
 
 
@@ -254,8 +256,8 @@ def print_report(results: dict) -> None:
         for phrase, count in items[:15]:
             bar = "█" * min(count, 30)
             print(f"  {phrase:<30} {count:>5}  {bar}")
-    print(f"\n  Top words (after stopwords)")
-    print(f"  {'-'*40}")
+    print("\n  Top words (after stopwords)")
+    print("  " + "-" * 40)
     for word, count in results.get("top_unigrams", [])[:20]:
         bar = "█" * min(count // 5, 30)
         print(f"  {word:<30} {count:>5}  {bar}")
