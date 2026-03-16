@@ -9,7 +9,6 @@ import feedparser
 import requests
 from newspaper import Article
 import time
-import json
 import hashlib
 import logging
 import re
@@ -18,7 +17,6 @@ import os
 import nltk
 from datetime import datetime, timezone
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from pathlib import Path
 from typing import Optional
 from bs4 import BeautifulSoup
 
