@@ -8,9 +8,7 @@ from __future__ import annotations
 
 import json
 import sys
-import os
 from pathlib import Path
-from unittest.mock import patch, MagicMock
 from datetime import datetime, timezone
 
 # ensure package importable from repo root
@@ -21,7 +19,7 @@ from news_scraper.models   import ArticleRecord, FeedResult, ScrapeSession
 from news_scraper.scraper  import score_article
 from news_scraper.analysis import (
     tokenize, count_phrases, analyze_corpus,
-    enrich_article, STOPWORDS, KEYWORDS_TECH, KEYWORDS_LEADERS,
+    enrich_article,
 )
 
 
@@ -312,12 +310,12 @@ class TestWriter:
         written = write_outputs(session, cfg)
 
         lines = [
-            json.loads(l)
-            for l in written["jsonl"].read_text().splitlines()
-            if l.strip()
+            json.loads(row)
+            for row in written["jsonl"].read_text().splitlines()
+            if row.strip()
         ]
         assert len(lines) == 3
-        assert all("url_hash" in l for l in lines)
+        assert all("url_hash" in rec for rec in lines)
 
     def test_master_index_appends(self, tmp_path):
         from news_scraper.writer import write_outputs
@@ -327,7 +325,7 @@ class TestWriter:
         write_outputs(self._make_session(), cfg)
 
         index_path = tmp_path / "index" / "master_index.jsonl"
-        lines      = [l for l in index_path.read_text().splitlines() if l.strip()]
+        lines      = [row for row in index_path.read_text().splitlines() if row.strip()]
         # Two sessions × 3 articles each = 6 lines
         assert len(lines) == 6
 
@@ -340,8 +338,8 @@ class TestWriter:
         written = write_outputs(session, cfg)
 
         lines = [
-            json.loads(l)
-            for l in written["jsonl"].read_text().splitlines()
-            if l.strip()
+            json.loads(row)
+            for row in written["jsonl"].read_text().splitlines()
+            if row.strip()
         ]
         assert len(lines) == 2  # only the two non-stub articles
