@@ -96,8 +96,10 @@ def run(
         cfg = ScraperConfig()
 
     # ── Override with explicit args ───────────────────────────────
-    if keywords: cfg.keywords    = keywords
-    if feeds:    cfg.feeds       = feeds
+    if keywords:
+        cfg.keywords = keywords
+    if feeds:
+        cfg.feeds = feeds
     cfg.output_dir  = output
     cfg.max_workers = workers
 
