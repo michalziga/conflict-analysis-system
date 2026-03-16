@@ -1,0 +1,49 @@
+{
+  "_comment": "Copy this file to config.json and edit. Pass with: python -m news_scraper --config config.json",
+
+  "keywords": [
+    "war", "Iran", "IRGC", "US", "Israel",
+    "missile", "sanctions", "nuclear", "ceasefire", "airstrike",
+    "Hezbollah", "Hamas", "Gaza", "Lebanon", "Yemen", "Houthi"
+  ],
+
+  "feeds": [
+    "https://www.csis.org/rss.xml",
+    "https://www.rand.org/pubs/commentary.xml",
+    "https://www.rand.org/pubs/research_reports.xml",
+    "https://carnegieendowment.org/rss",
+    "https://www.brookings.edu/feed/?post_type=research",
+    "https://www.chathamhouse.org/rss.xml",
+    "https://www.iiss.org/rss",
+    "https://foreignaffairs.com/rss.xml",
+    "https://foreignpolicy.com/feed",
+    "https://warontherocks.com/feed",
+    "https://iswresearch.blogspot.com/feeds/posts/default",
+    "https://feeds.bbci.co.uk/news/world/rss.xml",
+    "https://feeds.reuters.com/reuters/worldNews",
+    "https://apnews.com/rss/apf-intlnews",
+    "https://www.theguardian.com/world/rss",
+    "https://www.aljazeera.com/xml/rss/all.xml",
+    "https://timesofindia.indiatimes.com/rssfeeds/296589292.cms",
+    "https://www.france24.com/en/rss",
+    "https://feeds.dw.com/rw/rss/rss.xml",
+    "https://www.spacewar.com/Military_Technology.xml",
+    "https://www.defense.gov/DesktopModules/ArticleCS/RSS.ashx?ContentType=1&Site=945&max=10"
+  ],
+
+  "max_entries_per_feed":    50,
+  "delay_between_requests":  2.0,
+  "request_timeout":         15,
+  "max_workers":             4,
+  "output_dir":              "output",
+  "save_json":               true,
+  "save_jsonl":              true,
+  "save_index":              true,
+  "min_word_count":          80,
+
+  "entity_hints": {
+    "countries":     ["Iran", "Israel", "US", "USA", "United States", "Russia", "China"],
+    "organizations": ["IRGC", "NATO", "UN", "CIA", "Mossad", "IDF", "Pentagon"],
+    "event_types":   ["airstrike", "ceasefire", "sanctions", "nuclear", "missile", "invasion"]
+  }
+}

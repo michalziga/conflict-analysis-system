@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name            = "news-scraper-cas"
+version         = "1.0.0"
+description     = "Geopolitical conflict news scraper and analysis pipeline"
+readme          = "README.md"
+requires-python = ">=3.9"
+license         = { text = "MIT" }
+
+dependencies = [
+    "feedparser>=6.0",
+    "newspaper3k>=0.2.8",
+    "lxml>=5.0",
+    "lxml_html_clean>=0.1",
+    "requests>=2.31",
+    "beautifulsoup4>=4.12",
+    "nltk>=3.8",
+    "langdetect>=1.0.9",
+]
+
+[project.optional-dependencies]
+nlp = [
+    "spacy>=3.7",
+    "sentence-transformers>=2.7",
+    "transformers>=4.40",
+]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "ruff>=0.4",
+]
+
+[project.scripts]
+cas-scraper  = "news_scraper.__main__:main"
+cas-analysis = "news_scraper.analysis:main"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["news_scraper*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts   = "-v --tb=short"

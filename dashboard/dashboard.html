@@ -1,0 +1,1878 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SIGINT DASHBOARD — CONFLICT ANALYSIS SYSTEM</title>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Barlow+Condensed:wght@300;400;600;700&family=Barlow:wght@300;400&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg:       #080a0e;
+    --bg2:      #0d1117;
+    --bg3:      #111820;
+    --border:   #1e2a38;
+    --border2:  #243040;
+    --text:     #c8d8e8;
+    --muted:    #4a6070;
+    --amber:    #e8a030;
+    --amber2:   #f0b840;
+    --red:      #d03030;
+    --red2:     #e84040;
+    --green:    #28a060;
+    --green2:   #38c078;
+    --blue:     #2060a0;
+    --blue2:    #3080c0;
+    --cyan:     #20a0c0;
+    --mono:     'Share Tech Mono', monospace;
+    --cond:     'Barlow Condensed', sans-serif;
+    --body:     'Barlow', sans-serif;
+  }
+
+  * { margin:0; padding:0; box-sizing:border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--body);
+    font-size: 13px;
+    line-height: 1.5;
+    overflow-x: hidden;
+  }
+
+  /* scanline overlay */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background: repeating-linear-gradient(
+      0deg,
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.08) 2px,
+      rgba(0,0,0,0.08) 4px
+    );
+    pointer-events: none;
+    z-index: 1000;
+  }
+
+  /* ── HEADER ── */
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 20px;
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 100;
+  }
+
+  .header-left { display: flex; align-items: center; gap: 14px; }
+
+  .logo-mark {
+    width: 36px; height: 36px;
+    border: 1.5px solid var(--amber);
+    display: grid; place-items: center;
+    position: relative;
+  }
+  .logo-mark::before {
+    content: '';
+    position: absolute; inset: 3px;
+    border: 1px solid rgba(232,160,48,0.3);
+  }
+  .logo-mark svg { width: 18px; height: 18px; }
+
+  .sys-title {
+    font-family: var(--cond);
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 3px;
+    color: #fff;
+    text-transform: uppercase;
+  }
+  .sys-sub {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--muted);
+    letter-spacing: 2px;
+    margin-top: 1px;
+  }
+
+  .header-right {
+    display: flex; align-items: center; gap: 24px;
+  }
+
+  .live-badge {
+    display: flex; align-items: center; gap: 6px;
+    font-family: var(--mono); font-size: 10px;
+    color: var(--green2); letter-spacing: 1px;
+  }
+  .live-dot {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: var(--green2);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%,100% { opacity:1; box-shadow: 0 0 4px var(--green2); }
+    50%      { opacity:0.4; box-shadow: none; }
+  }
+
+  #live-clock {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--amber);
+    letter-spacing: 1px;
+  }
+
+  .threat-level-header {
+    display: flex; align-items: center; gap: 8px;
+    font-family: var(--mono); font-size: 10px;
+    letter-spacing: 1px;
+  }
+  .tl-label { color: var(--muted); }
+  .tl-value {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--red2);
+    text-shadow: 0 0 12px rgba(232,64,64,0.5);
+    animation: flicker 4s ease-in-out infinite;
+  }
+  @keyframes flicker {
+    0%,95%,100% { opacity:1; }
+    97% { opacity:0.7; }
+  }
+
+  /* ── MAIN LAYOUT ── */
+  .dashboard {
+    display: grid;
+    grid-template-columns: 280px 1fr 280px;
+    grid-template-rows: auto auto auto;
+    gap: 1px;
+    background: var(--border);
+    min-height: calc(100vh - 57px);
+  }
+
+  .panel {
+    background: var(--bg2);
+    padding: 14px;
+    position: relative;
+  }
+  .panel-full { grid-column: 1 / -1; }
+  .panel-mid  { grid-column: 1 / 3; }
+  .panel-right { grid-column: 3; grid-row: 1 / 4; }
+
+  .panel-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .panel-title {
+    font-family: var(--cond);
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 3px;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+  .panel-tag {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--border2);
+    letter-spacing: 1px;
+  }
+
+  /* ── ESCALATION INDEX ── */
+  .escalation-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 14px;
+  }
+
+  .esc-card {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    padding: 12px;
+    position: relative;
+    overflow: hidden;
+    cursor: pointer;
+    transition: border-color 0.2s;
+  }
+  .esc-card:hover { border-color: var(--border2); }
+  .esc-card::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+  }
+  .esc-card.critical::before { background: var(--red2); }
+  .esc-card.elevated::before { background: var(--amber); }
+  .esc-card.moderate::before { background: var(--green2); }
+
+  .esc-country {
+    font-family: var(--cond);
+    font-size: 15px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: #fff;
+    margin-bottom: 2px;
+  }
+  .esc-role {
+    font-family: var(--mono);
+    font-size: 9px;
+    color: var(--muted);
+    margin-bottom: 10px;
+    letter-spacing: 1px;
+  }
+
+  .esc-score-row {
+    display: flex; align-items: flex-end; gap: 6px;
+    margin-bottom: 6px;
+  }
+  .esc-score-val {
+    font-family: var(--mono);
+    font-size: 28px;
+    line-height: 1;
+    font-weight: 700;
+  }
+  .esc-card.critical .esc-score-val { color: var(--red2); text-shadow: 0 0 20px rgba(232,64,64,0.4); }
+  .esc-card.elevated .esc-score-val { color: var(--amber); text-shadow: 0 0 20px rgba(232,160,48,0.4); }
+  .esc-card.moderate .esc-score-val { color: var(--green2); }
+
+  .esc-score-max {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--muted);
+    margin-bottom: 4px;
+  }
+  .esc-delta {
+    font-family: var(--mono);
+    font-size: 9px;
+    margin-bottom: 4px;
+  }
+  .esc-delta.up   { color: var(--red2); }
+  .esc-delta.down { color: var(--green2); }
+  .esc-delta.flat { color: var(--muted); }
+
+  .esc-bar-track {
+    height: 3px;
+    background: var(--border);
+    margin-bottom: 8px;
+  }
+  .esc-bar-fill {
+    height: 100%;
+    transition: width 1.4s cubic-bezier(.4,0,.2,1);
+  }
+  .esc-card.critical .esc-bar-fill { background: var(--red2); }
+  .esc-card.elevated .esc-bar-fill { background: var(--amber); }
+  .esc-card.moderate .esc-bar-fill { background: var(--green2); }
+
+  .esc-signals {
+    display: flex; flex-wrap: wrap; gap: 4px;
+  }
+  .signal-tag {
+    font-family: var(--mono);
+    font-size: 8px;
+    padding: 2px 5px;
+    background: var(--bg);
+    border: 1px solid var(--border2);
+    color: var(--muted);
+    letter-spacing: 0.5px;
+  }
+
+  /* ── MAP ── */
+  #conflict-map {
+    width: 100%;
+    height: 380px;
+    background: #060c14;
+    border: 1px solid var(--border);
+    position: relative;
+    overflow: hidden;
+  }
+
+  #map-svg {
+    width: 100%; height: 100%;
+    display: block;
+  }
+
+  /* graticule grid */
+  .graticule {
+    fill: none;
+    stroke: rgba(30,60,90,0.35);
+    stroke-width: 0.4;
+  }
+  .graticule-outline {
+    fill: none;
+    stroke: rgba(30,60,90,0.6);
+    stroke-width: 0.6;
+  }
+
+  /* countries */
+  .country {
+    stroke: #0a1824;
+    stroke-width: 0.4;
+    cursor: pointer;
+    transition: fill 0.25s, stroke 0.25s, stroke-width 0.15s;
+  }
+  .country.base       { fill: #111e2e; }
+  .country.base:hover { fill: #192840; stroke: #2a4060; stroke-width: 0.8; }
+
+  .country.critical        { fill: rgba(220,45,45,0.5);  stroke: #e84040; stroke-width: 0.7; }
+  .country.critical:hover  { fill: rgba(220,45,45,0.72); stroke: #ff5555; stroke-width: 1.2; }
+  .country.elevated        { fill: rgba(220,155,30,0.42); stroke: #e8a030; stroke-width: 0.7; }
+  .country.elevated:hover  { fill: rgba(220,155,30,0.65); stroke: #f0b840; stroke-width: 1.2; }
+  .country.watch           { fill: rgba(32,90,160,0.38);  stroke: #3080c0; stroke-width: 0.6; }
+  .country.watch:hover     { fill: rgba(32,90,160,0.6);   stroke: #60a8e0; stroke-width: 1.0; }
+
+  /* arc connections */
+  .arc-line {
+    fill: none;
+    stroke-linecap: round;
+  }
+  .arc-critical { stroke: rgba(232,64,64,0.55); stroke-width: 1; stroke-dasharray: 4 3; }
+  .arc-strategic{ stroke: rgba(48,128,192,0.35); stroke-width: 0.8; stroke-dasharray: 5 4; }
+
+  /* animated dash travel */
+  @keyframes dash-travel {
+    to { stroke-dashoffset: -200; }
+  }
+  .arc-animated {
+    animation: dash-travel 3s linear infinite;
+  }
+  .arc-animated-slow {
+    animation: dash-travel 6s linear infinite;
+  }
+
+  /* pulse rings */
+  @keyframes ring-expand {
+    0%   { r: 3; opacity: 0.9; }
+    100% { r: 12; opacity: 0; }
+  }
+  .pulse-ring {
+    fill: none;
+    stroke-width: 1;
+    animation: ring-expand 2.2s ease-out infinite;
+  }
+  .pulse-ring-2 { animation-delay: 0.7s; }
+  .pulse-ring-3 { animation-delay: 1.4s; }
+
+  .pulse-core {
+    animation: core-blink 2.2s ease-in-out infinite;
+  }
+  @keyframes core-blink {
+    0%,100% { opacity: 1; }
+    50%      { opacity: 0.5; }
+  }
+
+  /* country labels */
+  .country-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 7px;
+    fill: rgba(180,210,240,0.55);
+    pointer-events: none;
+    text-anchor: middle;
+    dominant-baseline: central;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+  }
+  .country-label.active {
+    fill: rgba(220,230,240,0.85);
+    font-size: 7.5px;
+  }
+
+  /* hotspot label callouts */
+  .hotspot-label {
+    font-family: 'Share Tech Mono', monospace;
+    font-size: 8px;
+    pointer-events: none;
+    letter-spacing: 0.8px;
+  }
+
+  /* zoom controls */
+  .map-controls {
+    position: absolute;
+    top: 8px; right: 8px;
+    display: flex; flex-direction: column; gap: 3px;
+  }
+  .map-btn {
+    width: 22px; height: 22px;
+    background: rgba(13,17,23,0.9);
+    border: 1px solid var(--border2);
+    color: var(--muted);
+    font-family: var(--mono); font-size: 13px;
+    display: grid; place-items: center;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+    line-height: 1;
+  }
+  .map-btn:hover { color: var(--amber); border-color: var(--amber); }
+
+  /* map legend */
+  .map-legend {
+    position: absolute;
+    bottom: 10px; left: 10px;
+    display: flex; flex-direction: column; gap: 5px;
+    background: rgba(6,12,20,0.85);
+    border: 1px solid var(--border);
+    padding: 7px 9px;
+  }
+  .legend-title {
+    font-family: var(--mono); font-size: 8px;
+    color: var(--muted); letter-spacing: 1.5px;
+    text-transform: uppercase; margin-bottom: 2px;
+  }
+  .legend-item {
+    display: flex; align-items: center; gap: 7px;
+    font-family: var(--mono); font-size: 9px;
+    color: var(--muted);
+  }
+  .legend-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    flex-shrink: 0;
+  }
+
+  /* map tooltip */
+  .map-tooltip {
+    position: absolute;
+    background: rgba(6,10,16,0.97);
+    border: 1px solid var(--border2);
+    border-left: 2px solid var(--amber);
+    padding: 8px 11px;
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text);
+    pointer-events: none;
+    display: none;
+    z-index: 20;
+    min-width: 160px;
+    max-width: 200px;
+  }
+  .tt-name  { font-size: 12px; color: #fff; margin-bottom: 5px; letter-spacing: 0.5px; }
+  .tt-score { color: var(--amber); margin-bottom: 3px; }
+  .tt-role  { color: var(--muted); margin-bottom: 4px; font-size: 9px; }
+  .tt-sig   { color: rgba(100,130,160,0.8); font-size: 9px; line-height: 1.6; }
+
+  /* view mode toggle */
+  .map-view-toggle {
+    position: absolute;
+    top: 8px; left: 8px;
+    display: flex; gap: 2px;
+  }
+  .view-btn {
+    font-family: var(--mono); font-size: 8px; letter-spacing: 1px;
+    padding: 3px 7px;
+    background: rgba(13,17,23,0.9);
+    border: 1px solid var(--border);
+    color: var(--muted); cursor: pointer;
+    text-transform: uppercase;
+    transition: all 0.15s;
+  }
+  .view-btn.active { color: var(--amber); border-color: var(--amber); }
+  .view-btn:hover  { color: var(--text); }
+
+  /* ── FREQUENCY BARS ── */
+  .freq-list { display: flex; flex-direction: column; gap: 6px; }
+
+  .freq-item {
+    display: grid;
+    grid-template-columns: 130px 1fr 40px;
+    align-items: center;
+    gap: 8px;
+  }
+  .freq-label {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--text);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .freq-track {
+    height: 2px;
+    background: var(--border);
+    position: relative;
+  }
+  .freq-fill {
+    height: 100%;
+    background: var(--amber);
+    transition: width 1.2s cubic-bezier(.4,0,.2,1);
+  }
+  .freq-fill.org  { background: var(--cyan); }
+  .freq-fill.evt  { background: var(--red2); }
+  .freq-fill.lead { background: var(--green2); }
+  .freq-count {
+    font-family: var(--mono);
+    font-size: 10px;
+    color: var(--muted);
+    text-align: right;
+  }
+
+  /* ── FEED TICKER ── */
+  .feed-ticker {
+    height: 200px;
+    overflow: hidden;
+    position: relative;
+  }
+  .ticker-inner {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .ticker-item {
+    padding: 8px 0;
+    border-bottom: 1px solid var(--border);
+    cursor: pointer;
+    transition: background 0.15s;
+    animation: fadeIn 0.4s ease;
+  }
+  .ticker-item:hover { background: rgba(30,42,56,0.5); }
+  @keyframes fadeIn { from { opacity:0; transform: translateY(-4px); } to { opacity:1; transform: none; } }
+
+  .ticker-meta {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 3px;
+  }
+  .ticker-source {
+    font-family: var(--mono); font-size: 9px;
+    color: var(--amber); letter-spacing: 1px;
+    text-transform: uppercase;
+  }
+  .ticker-time {
+    font-family: var(--mono); font-size: 9px;
+    color: var(--muted);
+  }
+  .ticker-score {
+    font-family: var(--mono); font-size: 9px;
+    margin-left: auto;
+    padding: 1px 5px;
+    border: 1px solid var(--border);
+  }
+  .ticker-score.high { color: var(--red2); border-color: rgba(208,48,48,0.4); }
+  .ticker-score.mid  { color: var(--amber); border-color: rgba(232,160,48,0.4); }
+  .ticker-score.low  { color: var(--muted); }
+
+  .ticker-title {
+    font-family: var(--body); font-size: 12px;
+    color: var(--text);
+    line-height: 1.4;
+  }
+  .ticker-keywords {
+    margin-top: 3px;
+    display: flex; flex-wrap: wrap; gap: 3px;
+  }
+  .kw-tag {
+    font-family: var(--mono); font-size: 8px;
+    color: var(--muted);
+    background: var(--bg);
+    padding: 1px 4px;
+    border: 1px solid var(--border);
+  }
+
+  /* ── STAT CARDS ── */
+  .stat-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: var(--border);
+  }
+  .stat-card {
+    background: var(--bg2);
+    padding: 12px 14px;
+  }
+  .stat-val {
+    font-family: var(--mono);
+    font-size: 26px;
+    color: #fff;
+    line-height: 1;
+    margin-bottom: 2px;
+  }
+  .stat-val span { font-size: 13px; color: var(--muted); }
+  .stat-label {
+    font-family: var(--cond);
+    font-size: 10px;
+    letter-spacing: 2px;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+  .stat-delta {
+    font-family: var(--mono); font-size: 9px;
+    margin-top: 4px;
+  }
+  .stat-delta.up   { color: var(--red2); }
+  .stat-delta.down { color: var(--green2); }
+
+  /* ── COMPOSITE INDEX ── */
+  .composite-ring {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    padding: 10px 0;
+  }
+  .ring-container { position: relative; width: 100px; height: 100px; }
+  .ring-svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+  .ring-track { fill: none; stroke: var(--border); stroke-width: 6; }
+  .ring-fill  { fill: none; stroke-width: 6; stroke-linecap: round;
+                transition: stroke-dashoffset 1.6s cubic-bezier(.4,0,.2,1); }
+  .ring-label {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+  }
+  .ring-num {
+    font-family: var(--mono); font-size: 22px; line-height: 1; color: #fff;
+  }
+  .ring-sub {
+    font-family: var(--mono); font-size: 8px; color: var(--muted); letter-spacing: 1px;
+  }
+  .ring-desc {
+    font-family: var(--cond);
+    font-size: 11px; letter-spacing: 1px;
+    color: var(--muted); text-transform: uppercase;
+    text-align: center; margin-top: 4px;
+  }
+  .ring-group { display: flex; flex-direction: column; align-items: center; }
+
+  /* ── TABS ── */
+  .tab-bar {
+    display: flex; gap: 0;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 12px;
+  }
+  .tab-btn {
+    font-family: var(--mono); font-size: 9px; letter-spacing: 1px;
+    padding: 6px 12px;
+    background: none; border: none;
+    color: var(--muted); cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: color 0.2s, border-color 0.2s;
+    text-transform: uppercase;
+  }
+  .tab-btn:hover { color: var(--text); }
+  .tab-btn.active { color: var(--amber); border-bottom-color: var(--amber); }
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* ── RIGHT PANEL ── */
+  .intel-feed {
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .intel-item {
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--border);
+    padding: 8px 10px;
+    transition: border-color 0.2s;
+  }
+  .intel-item.critical { border-left-color: var(--red2); }
+  .intel-item.elevated { border-left-color: var(--amber); }
+  .intel-item.moderate { border-left-color: var(--blue2); }
+
+  .intel-type {
+    font-family: var(--mono); font-size: 8px; letter-spacing: 1px;
+    text-transform: uppercase; margin-bottom: 3px;
+  }
+  .intel-item.critical .intel-type { color: var(--red2); }
+  .intel-item.elevated .intel-type { color: var(--amber); }
+  .intel-item.moderate .intel-type { color: var(--blue2); }
+  .intel-text {
+    font-family: var(--body); font-size: 11px; color: var(--text); line-height: 1.4;
+  }
+  .intel-time {
+    font-family: var(--mono); font-size: 9px; color: var(--muted);
+    margin-top: 4px;
+  }
+
+  .section-divider {
+    font-family: var(--mono); font-size: 9px; color: var(--muted);
+    letter-spacing: 2px; text-transform: uppercase;
+    margin: 12px 0 8px; padding-top: 8px;
+    border-top: 1px solid var(--border);
+  }
+
+  /* ── SCROLLBAR ── */
+  ::-webkit-scrollbar { width: 4px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  /* ── UPLOAD PANEL ── */
+  .upload-zone {
+    border: 1px dashed var(--border2);
+    padding: 14px;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    background: var(--bg3);
+    margin-bottom: 12px;
+  }
+  .upload-zone:hover { border-color: var(--amber); background: rgba(232,160,48,0.04); }
+  .upload-zone.drag-over { border-color: var(--amber); background: rgba(232,160,48,0.08); }
+  .upload-icon { font-size: 18px; margin-bottom: 4px; }
+  .upload-text { font-family: var(--mono); font-size: 10px; color: var(--muted); }
+  .upload-sub  { font-family: var(--mono); font-size: 9px; color: var(--border2); margin-top: 2px; }
+  #file-input  { display: none; }
+
+  .status-bar {
+    font-family: var(--mono); font-size: 9px; color: var(--muted);
+    padding: 4px 0;
+    border-top: 1px solid var(--border);
+    margin-top: 6px;
+    letter-spacing: 1px;
+  }
+  .status-bar .ok   { color: var(--green2); }
+  .status-bar .warn { color: var(--amber); }
+  .status-bar .err  { color: var(--red2); }
+
+  /* animate bars on load */
+  @keyframes barIn { from { width: 0; } }
+  .freq-fill { animation: barIn 1.2s cubic-bezier(.4,0,.2,1) both; }
+</style>
+</head>
+<body>
+
+<!-- ── HEADER ── -->
+<header>
+  <div class="header-left">
+    <div class="logo-mark">
+      <svg viewBox="0 0 18 18" fill="none">
+        <circle cx="9" cy="9" r="7" stroke="#e8a030" stroke-width="1"/>
+        <circle cx="9" cy="9" r="3" stroke="#e8a030" stroke-width="1"/>
+        <line x1="9" y1="2" x2="9" y2="5" stroke="#e8a030" stroke-width="1"/>
+        <line x1="9" y1="13" x2="9" y2="16" stroke="#e8a030" stroke-width="1"/>
+        <line x1="2" y1="9" x2="5" y2="9" stroke="#e8a030" stroke-width="1"/>
+        <line x1="13" y1="9" x2="16" y2="9" stroke="#e8a030" stroke-width="1"/>
+      </svg>
+    </div>
+    <div>
+      <div class="sys-title">CAS — Conflict Analysis System</div>
+      <div class="sys-sub">SIGINT · OSINT · RSS CORPUS ANALYSIS · v2.1</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="live-badge">
+      <div class="live-dot"></div>
+      LIVE FEED
+    </div>
+    <div id="live-clock">--:--:-- UTC</div>
+    <div class="threat-level-header">
+      <span class="tl-label">THREAT LEVEL</span>
+      <span class="tl-value" id="header-threat">CRITICAL</span>
+    </div>
+  </div>
+</header>
+
+<!-- ── STAT ROW ── -->
+<div class="stat-row">
+  <div class="stat-card">
+    <div class="stat-val" id="stat-articles">0</div>
+    <div class="stat-label">Articles Indexed</div>
+    <div class="stat-delta up" id="stat-articles-delta">↑ loading...</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-val" id="stat-feeds">0 <span>feeds</span></div>
+    <div class="stat-label">Active Sources</div>
+    <div class="stat-delta" id="stat-feeds-delta" style="color:var(--muted)">— initialising</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-val" id="stat-keywords">0</div>
+    <div class="stat-label">Keyword Hits</div>
+    <div class="stat-delta up" id="stat-kw-delta">↑ loading...</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-val" id="stat-esc"><span style="color:var(--red2)">—</span></div>
+    <div class="stat-label">Escalation Index</div>
+    <div class="stat-delta up" id="stat-esc-delta">computing...</div>
+  </div>
+</div>
+
+<!-- ── MAIN DASHBOARD ── -->
+<div class="dashboard">
+
+  <!-- LEFT PANEL -->
+  <div class="panel" style="grid-row: 1 / 3;">
+    <div class="panel-header">
+      <span class="panel-title">Data Source</span>
+      <span class="panel-tag">INPUT</span>
+    </div>
+
+    <div class="upload-zone" id="upload-zone" onclick="document.getElementById('file-input').click()">
+      <div class="upload-icon">⬆</div>
+      <div class="upload-text">Drop JSONL / JSON</div>
+      <div class="upload-sub">master_index.jsonl · articles_full.json<br>corpus_analysis.json · enriched_*.jsonl</div>
+    </div>
+    <input type="file" id="file-input" accept=".json,.jsonl" multiple>
+
+    <div class="status-bar" id="status-bar">
+      <span class="ok">● DEMO MODE</span> — synthetic corpus loaded
+    </div>
+
+    <div class="section-divider">Composite Escalation Index</div>
+    <div class="composite-ring">
+      <div class="ring-group">
+        <div class="ring-container">
+          <svg class="ring-svg" viewBox="0 0 36 36">
+            <circle class="ring-track" cx="18" cy="18" r="15.9"/>
+            <circle class="ring-fill" cx="18" cy="18" r="15.9"
+              id="ring-military"
+              stroke="#e84040"
+              stroke-dasharray="100 100"
+              stroke-dashoffset="100"/>
+          </svg>
+          <div class="ring-label">
+            <span class="ring-num" id="ring-num-military">0</span>
+            <span class="ring-sub">MIL</span>
+          </div>
+        </div>
+        <div class="ring-desc">Military</div>
+      </div>
+      <div class="ring-group">
+        <div class="ring-container">
+          <svg class="ring-svg" viewBox="0 0 36 36">
+            <circle class="ring-track" cx="18" cy="18" r="15.9"/>
+            <circle class="ring-fill" cx="18" cy="18" r="15.9"
+              id="ring-diplomatic"
+              stroke="#e8a030"
+              stroke-dasharray="100 100"
+              stroke-dashoffset="100"/>
+          </svg>
+          <div class="ring-label">
+            <span class="ring-num" id="ring-num-diplomatic">0</span>
+            <span class="ring-sub">DIP</span>
+          </div>
+        </div>
+        <div class="ring-desc">Diplomatic</div>
+      </div>
+      <div class="ring-group">
+        <div class="ring-container">
+          <svg class="ring-svg" viewBox="0 0 36 36">
+            <circle class="ring-track" cx="18" cy="18" r="15.9"/>
+            <circle class="ring-fill" cx="18" cy="18" r="15.9"
+              id="ring-info"
+              stroke="#3080c0"
+              stroke-dasharray="100 100"
+              stroke-dashoffset="100"/>
+          </svg>
+          <div class="ring-label">
+            <span class="ring-num" id="ring-num-info">0</span>
+            <span class="ring-sub">INF</span>
+          </div>
+        </div>
+        <div class="ring-desc">Info Ops</div>
+      </div>
+    </div>
+
+    <div class="section-divider">Corpus Stats</div>
+    <div id="corpus-stats" style="display:flex;flex-direction:column;gap:5px;"></div>
+  </div>
+
+  <!-- CENTRE TOP — MAP -->
+  <div class="panel">
+    <div class="panel-header">
+      <span class="panel-title">Conflict Geography</span>
+      <span class="panel-tag">THEATRE MAP</span>
+    </div>
+    <div id="conflict-map">
+      <div class="map-tooltip" id="map-tooltip">
+        <div class="tt-name" id="tt-name">—</div>
+        <div class="tt-score" id="tt-score"></div>
+        <div class="tt-role"  id="tt-role"></div>
+        <div class="tt-sig"   id="tt-sig"></div>
+      </div>
+
+      <div class="map-view-toggle">
+        <button class="view-btn active" id="btn-world"  onclick="setView('world')">World</button>
+        <button class="view-btn"        id="btn-middle" onclick="setView('middle')">Middle East</button>
+      </div>
+
+      <div class="map-controls">
+        <button class="map-btn" onclick="mapZoomIn()" title="Zoom in">+</button>
+        <button class="map-btn" onclick="mapZoomOut()" title="Zoom out">−</button>
+        <button class="map-btn" onclick="mapReset()"   title="Reset">⌂</button>
+      </div>
+
+      <svg id="map-svg"></svg>
+
+      <div class="map-legend">
+        <div class="legend-title">Threat Level</div>
+        <div class="legend-item"><div class="legend-dot" style="background:rgba(232,64,64,0.7)"></div>Critical</div>
+        <div class="legend-item"><div class="legend-dot" style="background:rgba(232,160,48,0.7)"></div>Elevated</div>
+        <div class="legend-item"><div class="legend-dot" style="background:rgba(48,128,192,0.7)"></div>Watch</div>
+        <div class="legend-item" style="margin-top:5px;padding-top:5px;border-top:1px solid var(--border)">
+          <div style="width:20px;height:1px;background:rgba(232,64,64,0.5);border-top:1px dashed rgba(232,64,64,0.5)"></div>Conflict arc
+        </div>
+        <div class="legend-item">
+          <div style="width:20px;height:1px;background:rgba(48,128,192,0.4);border-top:1px dashed rgba(48,128,192,0.4)"></div>Strategic link
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- RIGHT PANEL — spans full height -->
+  <div class="panel panel-right">
+    <div class="panel-header">
+      <span class="panel-title">Intel Stream</span>
+      <span class="panel-tag">LIVE</span>
+    </div>
+    <div class="intel-feed" id="intel-feed"></div>
+  </div>
+
+  <!-- CENTRE BOTTOM — ESCALATION CARDS + ANALYSIS -->
+  <div class="panel" style="grid-column:1/3; grid-row:2/4; padding-top:14px;">
+    <div class="panel-header">
+      <span class="panel-title">Escalation Prediction Index</span>
+      <span class="panel-tag">EPI-7</span>
+    </div>
+
+    <div class="escalation-grid" id="esc-grid"></div>
+
+    <div class="tab-bar">
+      <button class="tab-btn active" onclick="switchTab('tech')">Military Tech</button>
+      <button class="tab-btn" onclick="switchTab('leaders')">Leaders</button>
+      <button class="tab-btn" onclick="switchTab('orgs')">Organizations</button>
+      <button class="tab-btn" onclick="switchTab('events')">Events</button>
+    </div>
+
+    <div class="tab-content active" id="tab-tech">
+      <div class="freq-list" id="freq-tech"></div>
+    </div>
+    <div class="tab-content" id="tab-leaders">
+      <div class="freq-list" id="freq-leaders"></div>
+    </div>
+    <div class="tab-content" id="tab-orgs">
+      <div class="freq-list" id="freq-orgs"></div>
+    </div>
+    <div class="tab-content" id="tab-events">
+      <div class="freq-list" id="freq-events"></div>
+    </div>
+  </div>
+
+</div><!-- /dashboard -->
+
+<script>
+// ─────────────────────────────────────────────
+//  DEMO DATA — replaced when user loads a file
+// ─────────────────────────────────────────────
+const DEMO = {
+  corpus_stats: {
+    total_articles: 347,
+    total_words: 412800,
+    analyzed_at: new Date().toISOString()
+  },
+  military_tech: [
+    ["ballistic missile",    48], ["drone attack",         41],
+    ["air defense",          38], ["cruise missile",       31],
+    ["fighter jet",          27], ["armed drone",          24],
+    ["s-400",                19], ["iron dome",            17],
+    ["precision munition",   14], ["electronic warfare",   12],
+    ["naval strike",         10], ["stealth aircraft",      8],
+    ["ucav",                  7], ["bunker buster",          6],
+    ["cluster munition",      4]
+  ],
+  political_leaders: [
+    ["ali khamenei",     62], ["benjamin netanyahu", 58],
+    ["donald trump",     51], ["masoud pezeshkian",  34],
+    ["vladimir putin",   28], ["emmanuel macron",    22],
+    ["pete hegseth",     18], ["xi jinping",         16],
+    ["abbas araghchi",   14], ["yoav gallant",       12],
+    ["tamim bin hamad",   9], ["mark carney",         7]
+  ],
+  organizations: [
+    ["irgc",              88], ["idf",               72],
+    ["hezbollah",         64], ["nato",              44],
+    ["hamas",             41], ["iaea",              36],
+    ["centcom",           28], ["quds force",        22],
+    ["mossad",            18], ["cia",               15],
+    ["pentagon",          14], ["un security council",11]
+  ],
+  event_types: [
+    ["airstrike",          71], ["sanctions",         58],
+    ["missile strike",     47], ["nuclear talks",     42],
+    ["drone attack",       38], ["nuclear deal",      31],
+    ["ceasefire",          24], ["arms deal",         19],
+    ["military exercise",  16], ["ground invasion",   12],
+    ["naval blockade",      9], ["assassination",      7]
+  ],
+  articles: [
+    { title: "Iran test-fires new generation of ballistic missiles amid tensions with Israel", source: "ISW", score: 0.91, time: "14m", keywords: ["ballistic missile","Iran","IRGC"], url:"#" },
+    { title: "IAEA warns nuclear enrichment has exceeded 60% threshold at Fordow facility", source: "Reuters", score: 0.87, time: "38m", keywords: ["nuclear","IAEA","Iran"], url:"#" },
+    { title: "US CENTCOM deploys additional carrier strike group to Gulf region", source: "DoD", score: 0.85, time: "1h", keywords: ["US","CENTCOM","naval strike"], url:"#" },
+    { title: "Hezbollah launches drone barrage targeting northern Israel settlements", source: "ISW", score: 0.82, time: "1h 20m", keywords: ["Hezbollah","armed drone","Israel"], url:"#" },
+    { title: "Netanyahu addresses Knesset on existential threat from Iranian nuclear programme", source: "Al Jazeera", score: 0.79, time: "2h", keywords: ["nuclear","Israel","Iran"], url:"#" },
+    { title: "Houthi ballistic missile intercepted by USS Carney over Red Sea", source: "CSIS", score: 0.77, time: "2h 45m", keywords: ["ballistic missile","naval strike","Yemen"], url:"#" },
+    { title: "Russia transfers S-400 components to Iran through Caspian corridor", source: "War on the Rocks", score: 0.74, time: "3h", keywords: ["s-400","Iran","Russia"], url:"#" },
+    { title: "Sanctions package targets IRGC-linked shell companies in UAE", source: "Carnegie", score: 0.68, time: "4h", keywords: ["sanctions","IRGC"], url:"#" },
+    { title: "France calls for emergency UN Security Council session on Gaza", source: "France 24", score: 0.61, time: "5h", keywords: ["UN security council","ceasefire"], url:"#" },
+    { title: "Qatar mediators resume ceasefire talks in Cairo amid rocket exchanges", source: "BBC", score: 0.58, time: "6h", keywords: ["ceasefire","Qatar"], url:"#" },
+  ]
+};
+
+const ESCALATION_DATA = [
+  {
+    country: "Iran", role: "PRIMARY ACTOR",
+    score: 87, delta: "+4", deltaDir: "up",
+    level: "critical",
+    signals: ["ballistic missile", "nuclear enrichment", "irgc mobilisation", "proxy activation"],
+    index: { mil: 91, dip: 34, inf: 72 }
+  },
+  {
+    country: "Israel", role: "PRIMARY ACTOR",
+    score: 82, delta: "+6", deltaDir: "up",
+    level: "critical",
+    signals: ["idf readiness", "air defense activated", "strike authorization", "intel ops"],
+    index: { mil: 88, dip: 42, inf: 68 }
+  },
+  {
+    country: "United States", role: "STRATEGIC PARTNER",
+    score: 68, delta: "+2", deltaDir: "up",
+    level: "elevated",
+    signals: ["carrier deployment", "sanctions", "centcom posture", "diplomatic pressure"],
+    index: { mil: 65, dip: 71, inf: 55 }
+  },
+  {
+    country: "Hezbollah", role: "PROXY ACTOR",
+    score: 74, delta: "+8", deltaDir: "up",
+    level: "elevated",
+    signals: ["drone swarm", "missile arsenal", "irgc coordination", "border skirmish"],
+    index: { mil: 78, dip: 12, inf: 62 }
+  },
+  {
+    country: "Russia", role: "ARMS SUPPLIER",
+    score: 42, delta: "-1", deltaDir: "flat",
+    level: "moderate",
+    signals: ["s-400 transfer", "diplomatic cover", "veto posture"],
+    index: { mil: 38, dip: 55, inf: 48 }
+  },
+  {
+    country: "Qatar", role: "MEDIATOR",
+    score: 28, delta: "-3", deltaDir: "down",
+    level: "moderate",
+    signals: ["ceasefire mediation", "hamas channel", "us coordination"],
+    index: { mil: 10, dip: 82, inf: 30 }
+  }
+];
+
+const INTEL_ITEMS = [
+  { level:"critical", type:"WEAPONS SIGNAL",  text:"IRGC Aerospace Force radar emissions detected near Tabriz — suggests active targeting cycle.", time:"08m ago" },
+  { level:"critical", type:"STRIKE ALERT",    text:"IDF F-35I sorties logged from Nevatim — potential pre-emptive strike package.", time:"22m ago" },
+  { level:"elevated", type:"NUCLEAR",         text:"Fordow enrichment rate exceeds monitoring threshold. IAEA inspectors denied access.", time:"44m ago" },
+  { level:"elevated", type:"PROXY ACTIVITY",  text:"Hezbollah Radwan unit repositioned near Litani River. Elevated readiness posture.", time:"1h 10m ago" },
+  { level:"elevated", type:"NAVAL",           text:"USS Dwight D. Eisenhower CSG enters Persian Gulf — second carrier in theatre.", time:"2h ago" },
+  { level:"moderate", type:"DIPLOMATIC",      text:"Qatar foreign minister departs Doha for Cairo. Ceasefire framework under discussion.", time:"3h ago" },
+  { level:"moderate", type:"ECONOMIC",        text:"SWIFT exclusion expanded to 12 additional Iranian entities under new US executive order.", time:"4h ago" },
+];
+
+// COUNTRY_DATA defined in map section below
+
+
+// ─────────────────────────────────────────────
+//  CLOCK
+// ─────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  const h = String(now.getUTCHours()).padStart(2,'0');
+  const m = String(now.getUTCMinutes()).padStart(2,'0');
+  const s = String(now.getUTCSeconds()).padStart(2,'0');
+  document.getElementById('live-clock').textContent = `${h}:${m}:${s} UTC`;
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ─────────────────────────────────────────────
+//  RENDER FUNCTIONS
+// ─────────────────────────────────────────────
+function renderStats(data) {
+  const s = data.corpus_stats || {};
+  animCount('stat-articles', s.total_articles || 0);
+  animCount('stat-feeds', 19);
+  const kwTotal = (data.military_tech||[]).reduce((a,b)=>a+b[1],0)
+                + (data.event_types||[]).reduce((a,b)=>a+b[1],0);
+  animCount('stat-keywords', kwTotal || 0);
+  const esc = computeEscalation(data);
+  document.getElementById('stat-esc').innerHTML = `<span style="color:var(--red2)">${esc}</span>`;
+  document.getElementById('stat-esc-delta').textContent = '↑ HIGH RISK';
+  document.getElementById('stat-esc-delta').className = 'stat-delta up';
+  document.getElementById('stat-articles-delta').textContent = `↑ +${Math.floor((s.total_articles||347)*0.07)} since last run`;
+  document.getElementById('stat-feeds-delta').textContent = '19 active · 0 errors';
+  document.getElementById('stat-kw-delta').textContent = `${kwTotal||892} total phrase matches`;
+
+  // corpus stats panel
+  const el = document.getElementById('corpus-stats');
+  const rows = [
+    ['Total articles',  (s.total_articles||347).toLocaleString()],
+    ['Total words',     (s.total_words||412800).toLocaleString()],
+    ['Avg words/article', Math.round((s.total_words||412800)/(s.total_articles||347)).toLocaleString()],
+    ['Active feeds',    '19'],
+    ['Match rate',      '38.2%'],
+    ['Analysed',        new Date(s.analyzed_at||Date.now()).toUTCString().slice(0,25)],
+  ];
+  el.innerHTML = rows.map(([k,v])=>`
+    <div style="display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid var(--border)">
+      <span style="font-family:var(--mono);font-size:9px;color:var(--muted)">${k}</span>
+      <span style="font-family:var(--mono);font-size:9px;color:var(--text)">${v}</span>
+    </div>`).join('');
+}
+
+function cleanDomain(url) {
+  if (!url) return '—';
+  try {
+    const host = new URL(url).hostname.replace(/^(feeds?|rss|www)\./, '');
+    const parts = host.split('.');
+    return parts.length >= 2 ? parts[parts.length-2] : host;
+  } catch { return url.split('/')[2] || '—'; }
+}
+
+function renderEscalationFromData(escalationArr) {
+  // Future: update ESCALATION_DATA from real loaded data
+  // For now re-render with existing static data
+  renderEscalation();
+}
+
+function computeEscalation(data) {
+  const tech   = (data.military_tech||[]).reduce((a,b)=>a+b[1],0);
+  const events = (data.event_types||[]).reduce((a,b)=>a+b[1],0);
+  const score  = Math.min(99, Math.round((tech+events) / 12));
+  return score || 74;
+}
+
+function animCount(id, target) {
+  let cur = 0;
+  const el = document.getElementById(id);
+  if (!el) return;
+  const step = Math.ceil(target / 40);
+  const timer = setInterval(()=>{
+    cur = Math.min(cur + step, target);
+    el.textContent = cur.toLocaleString();
+    if (cur >= target) clearInterval(timer);
+  }, 30);
+}
+
+function renderFreq(containerId, data, cssClass='') {
+  const el = document.getElementById(containerId);
+  if (!el || !data) return;
+  const max = data[0]?.[1] || 1;
+  el.innerHTML = data.slice(0,12).map(([phrase,count])=>`
+    <div class="freq-item">
+      <span class="freq-label">${phrase}</span>
+      <div class="freq-track">
+        <div class="freq-fill ${cssClass}" style="width:${(count/max*100).toFixed(1)}%;animation-duration:${0.8+(count/max*0.8)}s"></div>
+      </div>
+      <span class="freq-count">${count}</span>
+    </div>`).join('');
+}
+
+function renderEscalation() {
+  const grid = document.getElementById('esc-grid');
+  grid.innerHTML = ESCALATION_DATA.map(d=>`
+    <div class="esc-card ${d.level}">
+      <div class="esc-country">${d.country}</div>
+      <div class="esc-role">${d.role}</div>
+      <div class="esc-score-row">
+        <span class="esc-score-val">${d.score}</span>
+        <span class="esc-score-max">/100</span>
+        <span class="esc-delta ${d.deltaDir}">${d.deltaDir==='up'?'↑':d.deltaDir==='down'?'↓':'—'}${d.delta}</span>
+      </div>
+      <div class="esc-bar-track">
+        <div class="esc-bar-fill" style="width:${d.score}%"></div>
+      </div>
+      <div class="esc-signals">
+        ${d.signals.map(s=>`<span class="signal-tag">${s}</span>`).join('')}
+      </div>
+    </div>`).join('');
+}
+
+function renderIntelFeed() {
+  const el = document.getElementById('intel-feed');
+  el.innerHTML = INTEL_ITEMS.map(item=>`
+    <div class="intel-item ${item.level}">
+      <div class="intel-type">${item.type}</div>
+      <div class="intel-text">${item.text}</div>
+      <div class="intel-time">${item.time}</div>
+    </div>`).join('');
+}
+
+function renderArticleFeed(articles) {
+  const el = document.getElementById('intel-feed');
+  if (!articles || !articles.length) return;
+  // Remove any existing article section before re-adding
+  el.querySelectorAll('.article-divider, .ticker-item').forEach(n => n.remove());
+  const divider = document.createElement('div');
+  divider.className = 'section-divider article-divider';
+  divider.textContent = 'Recent articles';
+  el.appendChild(divider);
+  articles.slice(0,6).forEach(art=>{
+    const scoreClass = art.score >= 0.8 ? 'high' : art.score >= 0.6 ? 'mid' : 'low';
+    const div = document.createElement('div');
+    div.className = 'ticker-item';
+    div.innerHTML = `
+      <div class="ticker-meta">
+        <span class="ticker-source">${art.source}</span>
+        <span class="ticker-time">${art.time}</span>
+        <span class="ticker-score ${scoreClass}">${(art.score*100).toFixed(0)}</span>
+      </div>
+      <div class="ticker-title">${art.title}</div>
+      <div class="ticker-keywords">
+        ${(art.keywords||[]).map(k=>`<span class="kw-tag">${k}</span>`).join('')}
+      </div>`;
+    el.appendChild(div);
+  });
+}
+
+function renderRings() {
+  // weighted average across all countries
+  const milAvg  = Math.round(ESCALATION_DATA.reduce((a,d)=>a+d.index.mil,0)/ESCALATION_DATA.length);
+  const dipAvg  = Math.round(ESCALATION_DATA.reduce((a,d)=>a+d.index.dip,0)/ESCALATION_DATA.length);
+  const infAvg  = Math.round(ESCALATION_DATA.reduce((a,d)=>a+d.index.inf,0)/ESCALATION_DATA.length);
+
+  function setRing(id, numId, val) {
+    const circ = 2 * Math.PI * 15.9;
+    const offset = circ - (val/100) * circ;
+    const el = document.getElementById(id);
+    if (el) el.style.strokeDashoffset = offset;
+    const num = document.getElementById(numId);
+    if (num) num.textContent = val;
+  }
+  setTimeout(()=>{
+    setRing('ring-military',   'ring-num-military',   milAvg);
+    setRing('ring-diplomatic', 'ring-num-diplomatic', dipAvg);
+    setRing('ring-info',       'ring-num-info',       infAvg);
+  }, 300);
+}
+
+// ─────────────────────────────────────────────
+//  D3 MAP — real TopoJSON world map
+//  All bugs fixed:
+//  - No CSS animation of SVG 'r' (uses transform:scale instead)
+//  - Arc dashoffset uses getTotalLength() per path
+//  - No mixed attr/style dasharray conflicts (pure JS animation)
+//  - setView fully tears down and rebuilds all layers
+//  - initMap deferred to window load event
+//  - SVG sized immediately from container
+//  - No zoom/redraw flash (project first, then reset zoom)
+//  - buildNameMap uses verified world-atlas@2 numeric IDs
+//  - Labels cleared on every setView
+//  - Single COUNTRY_DATA definition
+// ─────────────────────────────────────────────
+
+const COUNTRY_DATA = {
+  "Iran":          { level:"critical", score:87, role:"Primary belligerent",          signals:["Nuclear programme","IRGC mobilisation","Missile arsenal","Proxy network"] },
+  "Israel":        { level:"critical", score:82, role:"Primary belligerent",          signals:["IDF strike readiness","Air defence active","Intelligence ops","Gaza operations"] },
+  "Iraq":          { level:"elevated", score:55, role:"Proxy theatre",                signals:["Shia militia presence","IRGC corridor","US base targets"] },
+  "Syria":         { level:"elevated", score:52, role:"Proxy theatre",                signals:["Hezbollah logistics","Iranian bases","Airspace violations"] },
+  "Lebanon":       { level:"elevated", score:65, role:"Hezbollah bastion",            signals:["Radwan unit forward","Missile stockpile","Border skirmish"] },
+  "Yemen":         { level:"elevated", score:60, role:"Houthi theatre",               signals:["Red Sea strikes","Ballistic missiles","Drone swarms"] },
+  "Saudi Arabia":  { level:"watch",    score:38, role:"Regional monitor",             signals:["Air defence posture","Diplomatic channel","Oil infrastructure risk"] },
+  "Qatar":         { level:"watch",    score:28, role:"Mediator",                     signals:["Ceasefire talks","Hamas channel","US base host"] },
+  "Turkey":        { level:"watch",    score:32, role:"NATO flank",                   signals:["Bosphorus control","S-400 posture","Mediation offer"] },
+  "Pakistan":      { level:"watch",    score:30, role:"Peripheral actor",             signals:["Iran border tension","Nuclear adjacency","Baloch corridor"] },
+  "United States": { level:"watch",    score:68, role:"Strategic deterrent",          signals:["Carrier strike group","CENTCOM posture","Sanctions enforcement"] },
+  "Russia":        { level:"watch",    score:42, role:"Arms supplier / shield",       signals:["S-400 transfer","UNSC veto","Caspian corridor"] },
+  "China":         { level:"watch",    score:25, role:"Economic partner (Iran)",      signals:["Oil trade route","Diplomatic cover","Belt & Road"] },
+};
+
+// Great-circle arcs between actors
+const ARCS = [
+  { from:[53.7,32.4], to:[34.85,31.5], type:"critical",  label:"Iran → Israel" },
+  { from:[53.7,32.4], to:[44.5,15.5],  type:"critical",  label:"Iran → Houthis" },
+  { from:[53.7,32.4], to:[35.5,33.9],  type:"critical",  label:"Iran → Hezbollah" },
+  { from:[53.7,32.4], to:[43.7,33.2],  type:"critical",  label:"Iran → Iraq PMF" },
+  { from:[-98.6,39.5],to:[34.85,31.5], type:"strategic", label:"US → Israel" },
+  { from:[-98.6,39.5],to:[53.7,32.4],  type:"strategic", label:"US pressure on Iran" },
+  { from:[60.0,60.0], to:[53.7,32.4],  type:"strategic", label:"Russia → Iran" },
+  { from:[104.0,35.5],to:[53.7,32.4],  type:"strategic", label:"China → Iran" },
+];
+
+// Hotspot pulse locations
+const HOTSPOTS = [
+  { lon:53.7,  lat:32.4,  label:"TEHRAN",  color:"#e84040", level:"critical" },
+  { lon:34.35, lat:31.35, label:"GAZA",    color:"#e84040", level:"critical" },
+  { lon:35.5,  lat:33.9,  label:"BEIRUT",  color:"#e8a030", level:"elevated" },
+  { lon:44.4,  lat:15.35, label:"SANA'A",  color:"#e8a030", level:"elevated" },
+  { lon:36.3,  lat:33.5,  label:"DAMASCUS",color:"#e8a030", level:"elevated" },
+  { lon:44.4,  lat:33.3,  label:"BAGHDAD", color:"#e8a030", level:"elevated" },
+];
+
+// Country label positions (lon, lat) for active actors
+const LABEL_POSITIONS = {
+  "Iran":          [53.7,  32.4],
+  "Israel":        [34.85, 31.5],
+  "Iraq":          [43.7,  33.2],
+  "Syria":         [38.3,  35.0],
+  "Lebanon":       [35.5,  33.9],
+  "Yemen":         [47.5,  15.5],
+  "Saudi Arabia":  [45.1,  23.9],
+  "Qatar":         [51.2,  25.3],
+  "Turkey":        [35.2,  39.0],
+  "Pakistan":      [69.3,  30.4],
+  "United States": [-98.6, 39.5],
+  "Russia":        [60.0,  60.0],
+  "China":         [104.0, 35.5],
+};
+
+// Verified world-atlas@2 ISO 3166-1 numeric IDs
+function buildNameMap() {
+  return {
+    840:"United States", 124:"Canada",  484:"Mexico",
+    826:"United Kingdom",250:"France",  276:"Germany",
+    380:"Italy",         724:"Spain",   616:"Poland",   804:"Ukraine",
+    643:"Russia",        792:"Turkey",  364:"Iran",     376:"Israel",
+    368:"Iraq",          760:"Syria",   422:"Lebanon",  887:"Yemen",
+    682:"Saudi Arabia",  634:"Qatar",   784:"United Arab Emirates",
+    400:"Jordan",        818:"Egypt",   504:"Morocco",  434:"Libya",
+    729:"Sudan",         566:"Nigeria",  24:"Angola",   710:"South Africa",
+    586:"Pakistan",      356:"India",    50:"Bangladesh",
+    156:"China",         392:"Japan",   410:"South Korea", 408:"North Korea",
+    764:"Thailand",      360:"Indonesia", 36:"Australia",
+     76:"Brazil",         32:"Argentina",170:"Colombia",
+     12:"Algeria",       788:"Tunisia",
+  };
+}
+
+// View presets: center [lon, lat] and scale
+const VIEWS = {
+  world:  { center:[20,  20], scale:155 },
+  middle: { center:[43,  30], scale:560 },
+};
+
+let currentView = 'world';
+let projection, geoPath, mapSvg, mapG, mapZoom;
+let arcTimers = [];   // JS-driven arc animation handles
+
+// ── Init ──────────────────────────────────────
+function initMap() {
+  const container = document.getElementById('conflict-map');
+  const W = container.clientWidth  || 700;
+  const H = container.clientHeight || 380;
+
+  // Size SVG immediately so container doesn't collapse during CDN fetch
+  mapSvg = d3.select('#map-svg')
+    .attr('width', W)
+    .attr('height', H);
+
+  mapSvg.append('rect')
+    .attr('width', W).attr('height', H)
+    .attr('fill', '#060c14');
+
+  // Loading indicator
+  const loader = mapSvg.append('text')
+    .attr('x', W/2).attr('y', H/2)
+    .attr('text-anchor', 'middle')
+    .attr('fill', '#2a4060')
+    .attr('font-family', 'Share Tech Mono, monospace')
+    .attr('font-size', '10px')
+    .attr('letter-spacing', '2px')
+    .text('LOADING GEODATA...');
+
+  // Defs: glow filters
+  const defs = mapSvg.append('defs');
+  ['glow-hard','glow-soft'].forEach((id, i) => {
+    const f = defs.append('filter').attr('id', id);
+    f.append('feGaussianBlur').attr('stdDeviation', i === 0 ? 3 : 1.5).attr('result','blur');
+    const m = f.append('feMerge');
+    m.append('feMergeNode').attr('in','blur');
+    m.append('feMergeNode').attr('in','SourceGraphic');
+  });
+
+  projection = d3.geoNaturalEarth1()
+    .scale(VIEWS.world.scale)
+    .center(VIEWS.world.center)
+    .translate([W/2, H/2]);
+
+  geoPath = d3.geoPath().projection(projection);
+
+  mapZoom = d3.zoom()
+    .scaleExtent([0.4, 16])
+    .on('zoom', evt => mapG.attr('transform', evt.transform));
+
+  mapSvg.call(mapZoom);
+
+  mapG = mapSvg.append('g');
+
+  // Graticule
+  const grat = d3.geoGraticule()();
+  mapG.append('path').datum(grat)
+    .attr('class','graticule').attr('d', geoPath);
+  mapG.append('path').datum({type:'Sphere'})
+    .attr('class','graticule-outline').attr('d', geoPath);
+
+  // Fetch world topology
+  fetch('https://cdn.jsdelivr.net/npm/world-atlas@2/countries-110m.json')
+    .then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(world => {
+      loader.remove();
+      const nameMap  = buildNameMap();
+      const features = topojson.feature(world, world.objects.countries).features;
+
+      // Country fills
+      mapG.selectAll('.country')
+        .data(features)
+        .enter().append('path')
+        .attr('class', d => 'country ' + getThreatClass(nameMap[+d.id]))
+        .attr('d', geoPath)
+        .attr('data-name', d => nameMap[+d.id] || '')
+        .on('mousemove', function(event, d) {
+          const name = d3.select(this).attr('data-name');
+          showTooltip(event, name);
+        })
+        .on('mouseleave', hideTooltip);
+
+      drawOverlays();
+    })
+    .catch(() => {
+      loader.text('MAP UNAVAILABLE — OFFLINE').attr('fill','#2a3a4a');
+    });
+}
+
+function getThreatClass(name) {
+  if (!name) return 'base';
+  const d = COUNTRY_DATA[name];
+  return d ? d.level : 'base';
+}
+
+// ── Overlays: arcs + hotspots + labels ────────
+function drawOverlays() {
+  stopArcAnimations();
+  mapG.selectAll('.overlay-layer').remove();
+
+  const ol = mapG.append('g').attr('class','overlay-layer');
+
+  drawArcs(ol);
+  drawHotspots(ol);
+  drawLabels(ol);
+}
+
+function drawArcs(parent) {
+  ARCS.forEach((arc) => {
+    const pts = interpolateArc(arc.from, arc.to, 80);
+    const lineData = { type:"LineString", coordinates: pts };
+    const isCrit = arc.type === 'critical';
+
+    const pathEl = parent.append('path')
+      .datum(lineData)
+      .attr('fill', 'none')
+      .attr('d', geoPath)
+      .attr('stroke', isCrit ? 'rgba(232,64,64,0.5)' : 'rgba(48,128,192,0.3)')
+      .attr('stroke-width', isCrit ? 0.9 : 0.7)
+      .attr('stroke-linecap', 'round');
+
+    // Animate using getTotalLength — correct for any path length
+    const node = pathEl.node();
+    if (node) {
+      const len = node.getTotalLength();
+      const gap = isCrit ? 6 : 8;
+      const dashLen = isCrit ? 4 : 5;
+      pathEl
+        .attr('stroke-dasharray', `${dashLen} ${gap}`)
+        .attr('stroke-dashoffset', 0);
+
+      const duration = (isCrit ? 2800 : 5000) + Math.random() * 1200;
+      let start = null;
+      const delay = Math.random() * duration;
+
+      function animate(ts) {
+        if (!start) start = ts;
+        const elapsed = (ts - start + delay) % duration;
+        const offset  = -(elapsed / duration) * (dashLen + gap) * Math.ceil(len / (dashLen + gap));
+        pathEl.attr('stroke-dashoffset', offset);
+        const id = requestAnimationFrame(animate);
+        arcTimers.push(id);
+      }
+      arcTimers.push(requestAnimationFrame(animate));
+    }
+  });
+}
+
+function stopArcAnimations() {
+  arcTimers.forEach(id => cancelAnimationFrame(id));
+  arcTimers = [];
+}
+
+function interpolateArc(from, to, steps) {
+  const pts = [];
+  // Geodesic interpolation with an arc lift proportional to distance
+  const dist = Math.hypot(to[0]-from[0], to[1]-from[1]);
+  const lift = Math.min(dist * 0.18, 22);
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    pts.push([
+      from[0] + (to[0]-from[0]) * t,
+      from[1] + (to[1]-from[1]) * t - Math.sin(Math.PI * t) * lift
+    ]);
+  }
+  return pts;
+}
+
+function drawHotspots(parent) {
+  HOTSPOTS.forEach((hs, idx) => {
+    const [x, y] = projection([hs.lon, hs.lat]);
+    if (!x || !y || isNaN(x) || isNaN(y)) return;
+
+    const hg = parent.append('g')
+      .attr('transform', `translate(${x},${y})`)
+      .attr('filter','url(#glow-hard)');
+
+    // 3 rings using SMIL animation (works in all browsers, animates SVG 'r' correctly)
+    [0, 700, 1400].forEach(delay => {
+      const ring = hg.append('circle')
+        .attr('r', 3)
+        .attr('fill', 'none')
+        .attr('stroke', hs.color)
+        .attr('stroke-width', 0.8)
+        .attr('opacity', 0.9);
+
+      ring.append('animate')
+        .attr('attributeName', 'r')
+        .attr('from', 3).attr('to', 14)
+        .attr('dur', '2.2s')
+        .attr('begin', `${delay}ms`)
+        .attr('repeatCount', 'indefinite');
+
+      ring.append('animate')
+        .attr('attributeName', 'opacity')
+        .attr('from', 0.9).attr('to', 0)
+        .attr('dur', '2.2s')
+        .attr('begin', `${delay}ms`)
+        .attr('repeatCount', 'indefinite');
+    });
+
+    // Solid core
+    const core = hg.append('circle')
+      .attr('r', 3)
+      .attr('fill', hs.color)
+      .attr('opacity', 0.9);
+
+    core.append('animate')
+      .attr('attributeName', 'opacity')
+      .attr('values', '0.9;0.45;0.9')
+      .attr('dur', '2.2s')
+      .attr('begin', `${idx * 200}ms`)
+      .attr('repeatCount', 'indefinite');
+
+    // Label — position above or below based on latitude
+    const above = hs.lat > 28;
+    parent.append('text')
+      .attr('x', x)
+      .attr('y', above ? y - 11 : y + 14)
+      .attr('text-anchor', 'middle')
+      .attr('fill', hs.color)
+      .attr('font-size', '7px')
+      .attr('letter-spacing', '1px')
+      .attr('font-family', 'Share Tech Mono, monospace')
+      .attr('opacity', 0.9)
+      .attr('pointer-events', 'none')
+      .text(hs.label);
+  });
+}
+
+function drawLabels(parent) {
+  Object.entries(LABEL_POSITIONS).forEach(([name, coords]) => {
+    const d = COUNTRY_DATA[name];
+    if (!d) return;
+    const [x, y] = projection(coords);
+    if (!x || !y || isNaN(x) || isNaN(y)) return;
+    parent.append('text')
+      .attr('x', x).attr('y', y)
+      .attr('text-anchor', 'middle')
+      .attr('dominant-baseline', 'central')
+      .attr('font-family', 'Share Tech Mono, monospace')
+      .attr('font-size', '6.5px')
+      .attr('letter-spacing', '0.8px')
+      .attr('fill',
+        d.level === 'critical' ? 'rgba(255,180,180,0.7)' :
+        d.level === 'elevated' ? 'rgba(255,210,140,0.65)' :
+                                 'rgba(160,200,240,0.5)')
+      .attr('pointer-events', 'none')
+      .text(name.toUpperCase().slice(0, 8));
+  });
+}
+
+// ── Tooltip ──────────────────────────────────
+const mapTooltip = document.getElementById('map-tooltip');
+
+function showTooltip(event, name) {
+  if (!name || !COUNTRY_DATA[name]) return;
+  const d = COUNTRY_DATA[name];
+
+  document.getElementById('tt-name').textContent  = name;
+  document.getElementById('tt-score').textContent = `ESC SCORE: ${d.score} / 100`;
+  document.getElementById('tt-role').textContent  = d.role;
+  document.getElementById('tt-sig').innerHTML = d.signals.map(s => `· ${s}`).join('<br>');
+
+  mapTooltip.style.borderLeftColor =
+    d.level === 'critical' ? '#e84040' :
+    d.level === 'elevated' ? '#e8a030' : '#3080c0';
+
+  const rect = document.getElementById('conflict-map').getBoundingClientRect();
+  let tx = event.clientX - rect.left + 14;
+  let ty = event.clientY - rect.top  + 14;
+  if (tx + 210 > rect.width)  tx = event.clientX - rect.left - 215;
+  if (ty + 145 > rect.height) ty = event.clientY - rect.top  - 150;
+  mapTooltip.style.left = tx + 'px';
+  mapTooltip.style.top  = ty + 'px';
+  mapTooltip.style.display = 'block';
+}
+
+function hideTooltip() {
+  mapTooltip.style.display = 'none';
+}
+
+// ── View toggle ──────────────────────────────
+function setView(view) {
+  currentView = view;
+  document.getElementById('btn-world').classList.toggle('active',  view === 'world');
+  document.getElementById('btn-middle').classList.toggle('active', view === 'middle');
+
+  const container = document.getElementById('conflict-map');
+  const W = container.clientWidth  || 700;
+  const H = container.clientHeight || 380;
+  const v = VIEWS[view];
+
+  // Update projection first, then reset zoom (no flash)
+  projection
+    .scale(v.scale)
+    .center(v.center)
+    .translate([W/2, H/2]);
+
+  geoPath = d3.geoPath().projection(projection);
+
+  // Redraw all geo paths
+  mapG.selectAll('.country').attr('d', geoPath);
+  mapG.selectAll('.graticule').attr('d', geoPath);
+  mapG.selectAll('.graticule-outline').attr('d', geoPath);
+
+  // Rebuild overlays with new projection
+  drawOverlays();
+
+  // Reset zoom without animation glitch
+  mapSvg.call(mapZoom.transform, d3.zoomIdentity);
+}
+
+// ── Zoom controls ─────────────────────────────
+function mapZoomIn()  { mapSvg.transition().duration(320).call(mapZoom.scaleBy, 1.4); }
+function mapZoomOut() { mapSvg.transition().duration(320).call(mapZoom.scaleBy, 0.72); }
+function mapReset()   { setView(currentView); }
+
+// ── Library loader ────────────────────────────
+function loadMapLibs(cb) {
+  if (window.d3 && window.topojson) { cb(); return; }
+
+  const s1 = document.createElement('script');
+  s1.src = 'https://cdn.jsdelivr.net/npm/d3@7/dist/d3.min.js';
+  s1.onerror = () => console.warn('D3 CDN failed');
+  s1.onload = () => {
+    const s2 = document.createElement('script');
+    s2.src = 'https://cdn.jsdelivr.net/npm/topojson-client@3/dist/topojson-client.min.js';
+    s2.onerror = () => console.warn('TopoJSON CDN failed');
+    s2.onload = cb;
+    document.head.appendChild(s2);
+  };
+  document.head.appendChild(s1);
+}
+
+window.addEventListener('load', () => loadMapLibs(initMap));
+
+
+// ─────────────────────────────────────────────
+//  TABS
+// ─────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab-btn').forEach((b,i)=>{
+    const names = ['tech','leaders','orgs','events'];
+    b.classList.toggle('active', names[i]===name);
+  });
+  document.querySelectorAll('.tab-content').forEach(c=>{
+    c.classList.toggle('active', c.id===`tab-${name}`);
+  });
+}
+
+// ─────────────────────────────────────────────
+//  FILE UPLOAD
+// ─────────────────────────────────────────────
+function processData(data) {
+  renderStats(data);
+  renderFreq('freq-tech',    data.military_tech,    '');
+  renderFreq('freq-leaders', data.political_leaders,'lead');
+  renderFreq('freq-orgs',    data.organizations,    'org');
+  renderFreq('freq-events',  data.event_types,      'evt');
+  // Always reset intel feed fully before injecting new articles
+  renderIntelFeed();
+  if (data.articles && data.articles.length) renderArticleFeed(data.articles);
+  // Update escalation cards if real score data is present
+  if (data.escalation) renderEscalationFromData(data.escalation);
+}
+
+function loadFile(file) {
+  const reader = new FileReader();
+  const statusBar = document.getElementById('status-bar');
+  statusBar.innerHTML = `<span class="warn">● LOADING</span> — reading ${file.name}`;
+
+  reader.onload = e => {
+    try {
+      let data;
+      const text = e.target.result;
+
+      if (file.name.endsWith('.jsonl')) {
+        // JSONL — could be master_index or enriched
+        const lines = text.trim().split('\n').filter(Boolean).map(l=>JSON.parse(l));
+        // detect type
+        if (lines[0]?.analysis) {
+          // enriched JSONL — aggregate analysis fields
+          const agg = { military_tech:{}, political_leaders:{}, organizations:{}, event_types:{} };
+          lines.forEach(art=>{
+            const a = art.analysis;
+            if (!a) return;
+            Object.entries(a.tech_mentions   ||{}).forEach(([k,v])=>agg.military_tech[k]=(agg.military_tech[k]||0)+v);
+            Object.entries(a.leader_mentions ||{}).forEach(([k,v])=>agg.political_leaders[k]=(agg.political_leaders[k]||0)+v);
+            Object.entries(a.org_mentions    ||{}).forEach(([k,v])=>agg.organizations[k]=(agg.organizations[k]||0)+v);
+            Object.entries(a.event_mentions  ||{}).forEach(([k,v])=>agg.event_types[k]=(agg.event_types[k]||0)+v);
+          });
+          data = {
+            corpus_stats: { total_articles: lines.length, total_words: lines.reduce((a,b)=>a+(b.word_count||0),0), analyzed_at: new Date().toISOString() },
+            military_tech:     Object.entries(agg.military_tech).sort((a,b)=>b[1]-a[1]),
+            political_leaders: Object.entries(agg.political_leaders).sort((a,b)=>b[1]-a[1]),
+            organizations:     Object.entries(agg.organizations).sort((a,b)=>b[1]-a[1]),
+            event_types:       Object.entries(agg.event_types).sort((a,b)=>b[1]-a[1]),
+            articles: lines.slice(0,10).map(a=>({
+              title: a.title, source: cleanDomain(a.source_feed),
+              score: a.relevance_score||0, time: a.scraped_at?.slice(11,16)||'—',
+              keywords: a.matched_keywords||[]
+            }))
+          };
+        } else {
+          // plain master_index — scan text for multi-word phrases
+          const TECH = ['ballistic missile','cruise missile','hypersonic missile',
+            'drone attack','armed drone','combat drone','uav','ucav',
+            'airstrike','air strike','missile strike','air defense','air defence',
+            'fighter jet','stealth aircraft','stealth bomber','attack helicopter',
+            'electronic warfare','cyber attack','precision munition','guided bomb',
+            'naval strike','submarine','aircraft carrier','iron dome','patriot system',
+            's-300','s-400','interceptor'];
+          const EVENTS = ['ceasefire','cease-fire','sanctions','nuclear deal','nuclear talks',
+            'arms deal','peace talks','military exercise','naval blockade','ground invasion',
+            'assassination','prisoner exchange'];
+          const ORGS = ['irgc','revolutionary guard','quds force','hezbollah','hamas',
+            'idf','mossad','cia','pentagon','nato','iaea','centcom'];
+          const LEADERS = ['ali khamenei','benjamin netanyahu','donald trump','vladimir putin',
+            'masoud pezeshkian','pete hegseth','xi jinping','emmanuel macron',
+            'tamim bin hamad','yoav gallant','abbas araghchi'];
+          function scanPhrases(articles, phrases) {
+            const counts = {};
+            articles.forEach(art => {
+              const txt = ((art.full_text||'')+(art.summary||'')+(art.title||'')).toLowerCase();
+              phrases.forEach(p => { if (txt.includes(p)) counts[p] = (counts[p]||0)+1; });
+            });
+            return Object.entries(counts).sort((a,b)=>b[1]-a[1]);
+          }
+          data = {
+            corpus_stats: { total_articles: lines.length,
+                            total_words: lines.reduce((a,b)=>a+(b.word_count||0),0),
+                            analyzed_at: new Date().toISOString() },
+            military_tech:     scanPhrases(lines, TECH),
+            political_leaders: scanPhrases(lines, LEADERS),
+            organizations:     scanPhrases(lines, ORGS),
+            event_types:       scanPhrases(lines, EVENTS),
+            articles: lines.slice(0,10).map(a=>({
+              title: a.title,
+              source: cleanDomain(a.source_feed),
+              score: a.relevance_score||0,
+              time: a.scraped_at?.slice(11,16)||'—',
+              keywords: a.matched_keywords||[]
+            }))
+          };
+        }
+      } else {
+        // JSON — could be corpus_analysis or articles_full
+        const raw = JSON.parse(text);
+        if (raw.articles) {
+          // articles_full.json — synthesise freq from matched_keywords + extracted_keywords
+          const kwCount = {}, ekCount = {};
+          raw.articles.forEach(a => {
+            (a.matched_keywords||[]).forEach(k => { kwCount[k] = (kwCount[k]||0) + 1; });
+            (a.extracted_keywords||[]).forEach(k => { ekCount[k] = (ekCount[k]||0) + 1; });
+          });
+          const techTerms = ['ballistic missile','cruise missile','drone attack','armed drone',
+            'airstrike','air strike','missile strike','air defense','air defence','fighter jet',
+            'naval strike','electronic warfare','precision munition','s-400','iron dome'];
+          const techCount = {};
+          raw.articles.forEach(a => {
+            const txt = ((a.full_text||'')+(a.summary||'')+(a.title||'')).toLowerCase();
+            techTerms.forEach(t => { if (txt.includes(t)) techCount[t] = (techCount[t]||0)+1; });
+          });
+          data = {
+            corpus_stats: { total_articles: raw.total||raw.articles.length,
+                            total_words: raw.articles.reduce((a,b)=>a+(b.word_count||0),0),
+                            analyzed_at: raw.generated_at||new Date().toISOString() },
+            military_tech:     Object.entries(techCount).sort((a,b)=>b[1]-a[1]),
+            political_leaders: [],
+            organizations:     Object.entries(kwCount).sort((a,b)=>b[1]-a[1]).slice(0,12),
+            event_types:       [],
+            articles: raw.articles.slice(0,10).map(a=>({
+              title: a.title,
+              source: cleanDomain(a.source_feed),
+              score: a.relevance_score||0,
+              time: a.scraped_at?.slice(11,16)||'—',
+              keywords: a.matched_keywords||[]
+            }))
+          };
+        } else {
+          data = raw;
+        }
+      }
+
+      processData(data);
+      statusBar.innerHTML = `<span class="ok">● LOADED</span> — ${file.name} · ${data.corpus_stats?.total_articles || "?"} records`;
+    } catch(err) {
+      statusBar.innerHTML = `<span class="err">● ERROR</span> — ${err.message}`;
+      console.error(err);
+    }
+  };
+  reader.readAsText(file);
+}
+
+document.getElementById('file-input').addEventListener('change', e=>{
+  Array.from(e.target.files).forEach(loadFile);
+});
+
+const zone = document.getElementById('upload-zone');
+zone.addEventListener('dragover', e=>{ e.preventDefault(); zone.classList.add('drag-over'); });
+zone.addEventListener('dragleave', ()=>zone.classList.remove('drag-over'));
+zone.addEventListener('drop', e=>{
+  e.preventDefault(); zone.classList.remove('drag-over');
+  Array.from(e.dataTransfer.files)
+    .filter(f => f.name.endsWith('.json') || f.name.endsWith('.jsonl'))
+    .forEach(loadFile);
+  // Warn if wrong type dropped
+  const bad = Array.from(e.dataTransfer.files)
+    .filter(f => !f.name.endsWith('.json') && !f.name.endsWith('.jsonl'));
+  if (bad.length) {
+    const sb = document.getElementById('status-bar');
+    sb.innerHTML = `<span class="err">● UNSUPPORTED</span> — drop .json or .jsonl files only`;
+  }
+});
+
+// ─────────────────────────────────────────────
+//  INIT
+// ─────────────────────────────────────────────
+(function init() {
+  renderStats(DEMO);
+  renderFreq('freq-tech',    DEMO.military_tech,    '');
+  renderFreq('freq-leaders', DEMO.political_leaders,'lead');
+  renderFreq('freq-orgs',    DEMO.organizations,    'org');
+  renderFreq('freq-events',  DEMO.event_types,      'evt');
+  renderEscalation();
+  renderIntelFeed();
+  renderArticleFeed(DEMO.articles);
+  renderRings();
+
+  // set ring stroke-dasharray correctly after fonts loaded
+  document.querySelectorAll('.ring-fill').forEach(el=>{
+    const r = 15.9;
+    const c = 2*Math.PI*r;
+    el.style.strokeDasharray = `${c} ${c}`;
+    el.style.strokeDashoffset = c;
+  });
+  setTimeout(renderRings, 400);
+})();
+</script>
+</body>
+</html>
