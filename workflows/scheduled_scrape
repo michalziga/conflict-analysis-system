@@ -1,0 +1,55 @@
+name: Scheduled Scrape
+
+on:
+  schedule:
+    # Run every 6 hours
+    - cron: "0 */6 * * *"
+  workflow_dispatch:
+    inputs:
+      max_entries:
+        description: "Max entries per feed (default 50)"
+        required: false
+        default: "50"
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run scraper
+        run: |
+          python -m news_scraper \
+            --output output \
+            --workers 2 \
+            --verbose
+        env:
+          MAX_ENTRIES: ${{ github.event.inputs.max_entries || '50' }}
+
+      - name: Run analysis
+        run: python -m news_scraper.analysis --enrich
+
+      - name: Upload output as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: scrape-output-${{ github.run_id }}
+          path: output/
+          retention-days: 30
+
+      # Optional: commit index back to repo (uncomment to enable)
+      # - name: Commit master index
+      #   run: |
+      #     git config user.name "github-actions[bot]"
+      #     git config user.email "github-actions[bot]@users.noreply.github.com"
+      #     git add output/index/master_index.jsonl
+      #     git diff --cached --quiet || git commit -m "chore: update master index [skip ci]"
+      #     git push
