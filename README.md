@@ -2,7 +2,7 @@
 
 A production-grade geopolitical news scraper, analysis pipeline, and intelligence dashboard — built for indexation and escalation prediction.
 
-![CI](https://github.com/YOUR_USERNAME/conflict-analysis-system/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/michalziga/conflict-analysis-system)
 [![Python 3.9+](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
